@@ -3,37 +3,39 @@ package com.todo.api.service;
 import com.todo.api.model.CreateTodoRequest;
 import com.todo.api.model.Todo;
 import com.todo.api.model.UpdateTodoRequest;
+import com.todo.api.repository.TodoRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class TodoService {
-    private final Map<String, Todo> todos = new ConcurrentHashMap<>();
+    private final TodoRepository todoRepository;
 
+    public TodoService(TodoRepository todoRepository) {
+        this.todoRepository = todoRepository;
+    }
+
+    @Transactional(readOnly = true)
     public List<Todo> list() {
-        return new ArrayList<>(todos.values());
+        return todoRepository.findAll();
     }
 
+    @Transactional
     public Todo create(CreateTodoRequest request) {
-        String id = UUID.randomUUID().toString();
-        Todo todo = new Todo(id, request.getTitle().trim(), false, Instant.now());
-        todos.put(id, todo);
-        return todo;
+        Todo todo = new Todo(UUID.randomUUID().toString(), request.getTitle().trim(), false, Instant.now());
+        return todoRepository.save(todo);
     }
 
+    @Transactional
     public Todo update(String id, UpdateTodoRequest request) {
-        Todo todo = todos.get(id);
-        if (todo == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Todo not found");
-        }
+        Todo todo = todoRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Todo not found"));
         if (request.getTitle() != null) {
             String title = request.getTitle().trim();
             if (title.isEmpty()) {
@@ -44,12 +46,14 @@ public class TodoService {
         if (request.getCompleted() != null) {
             todo.setCompleted(request.getCompleted());
         }
-        return todo;
+        return todoRepository.save(todo);
     }
 
+    @Transactional
     public void delete(String id) {
-        if (todos.remove(id) == null) {
+        if (!todoRepository.existsById(id)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Todo not found");
         }
+        todoRepository.deleteById(id);
     }
 }
